@@ -172,22 +172,9 @@ All screenshots and output above come directly from running `python3 order_simul
 (Python 3.9.6, macOS). The program is fully deterministic, so it prints the same
 output every time. No timestamps are printed.
 
-Actual output of `python3 -m unittest -v test_order_simulation`:
+Screenshot of `python3 -m unittest -v test_order_simulation` (all 7 tests pass):
 
-```text
-test_stale_worker_rejected (test_order_simulation.FencingTokenTests) ... ok
-test_tokens_increase (test_order_simulation.FencingTokenTests) ... ok
-test_later_version_without_earlier_stays_pending (test_order_simulation.MissingEventTests) ... ok
-test_2_then_1_then_2_again (test_order_simulation.VersionOrderingTests) ... ok
-test_fresh_order_starts_at_version_0 (test_order_simulation.VersionOrderingTests) ... ok
-test_invalid_status_rejected (test_order_simulation.VersionOrderingTests) ... ok
-test_pending_drains_in_order (test_order_simulation.VersionOrderingTests) ... ok
-
-----------------------------------------------------------------------
-Ran 7 tests in 0.000s
-
-OK
-```
+![Unit tests: 7 tests, all OK](screenshot_4_unit_tests.png)
 
 ## Reflection
 
