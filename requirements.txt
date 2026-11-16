@@ -1,0 +1,2 @@
+# No external dependencies.
+# This project uses only the Python 3 standard library (dataclasses, typing, unittest).
