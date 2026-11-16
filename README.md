@@ -97,25 +97,9 @@ arrives, and the order state is never moved past a gap.
 ## 4. Correct Event Ordering Evidence
 
 Required delivery order for `order-123`: **v2 → v1 → v2 again**.
-Actual output of `python3 order_simulation.py` (Version Ordering section):
+Screenshot of `python3 order_simulation.py` (Version Ordering section):
 
-```text
-=== Version Ordering Demo ===
-  STATE: order=order-123 current_version=0 current_status=None pending_versions=[] highest_fencing_token=0 last_writer=None
-
-[Delivery 1] v2 PAID arrives first
-  order=order-123 current_version=0 received_version=2 expected_version=1 action=pending missing_versions=[1] pending_versions=[2]
-  STATE: order=order-123 current_version=0 current_status=None pending_versions=[2] highest_fencing_token=0 last_writer=None
-
-[Delivery 2] v1 CREATED arrives
-  order=order-123 version=1 status=CREATED action=applied pending_versions=[2]
-  order=order-123 version=2 status=PAID action=applied_from_pending pending_versions=[]
-  STATE: order=order-123 current_version=2 current_status=PAID pending_versions=[] highest_fencing_token=0 last_writer=None
-
-[Delivery 3] v2 PAID arrives again (duplicate)
-  order=order-123 received_version=2 current_version=2 action=duplicate_or_old_event_ignored
-  STATE: order=order-123 current_version=2 current_status=PAID pending_versions=[] highest_fencing_token=0 last_writer=None
-```
+![Version Ordering Demo: v2, then v1, then v2 again](screenshot_1_version_ordering.png)
 
 What happened:
 
@@ -131,15 +115,12 @@ What happened:
 
 ## 5. Duplicate Handling Evidence
 
-From the same run:
+From the same run (see **[Delivery 3]** in the screenshot in section 4):
 
-```text
-[Delivery 3] v2 PAID arrives again (duplicate)
-  order=order-123 received_version=2 current_version=2 action=duplicate_or_old_event_ignored
-  STATE: order=order-123 current_version=2 current_status=PAID pending_versions=[] highest_fencing_token=0 last_writer=None
-```
+![Duplicate v2 ignored](screenshot_1_version_ordering.png)
 
-Version 2 has already been applied. Applying it again would incorrectly repeat the
+The line `received_version=2 current_version=2 action=duplicate_or_old_event_ignored` shows
+the duplicate being dropped. Version 2 has already been applied. Applying it again would incorrectly repeat the
 state transition (in a real system that could mean charging the customer twice or
 sending two "payment received" emails), so the duplicate is discarded and the state
 is unchanged (`current_version=2`, `current_status=PAID`).
@@ -147,33 +128,20 @@ is unchanged (`current_version=2`, `current_status=PAID`).
 ## 6. Missing Event Evidence
 
 A fresh order, `order-missing-test`, receives **only v2**; v1 has never arrived.
-Actual output (Missing Event section):
+Screenshot (Missing Event section):
 
-```text
-=== Missing Event Demo ===
-  STATE: order=order-missing-test current_version=0 current_status=None pending_versions=[] highest_fencing_token=0 last_writer=None
+![Missing Event Demo: v2 pending while v1 is missing, then recovery](screenshot_2_missing_event.png)
 
-[Delivery 1] only v2 PAID arrives; v1 has never arrived
-  order=order-missing-test current_version=0 received_version=2 expected_version=1 action=pending missing_versions=[1] pending_versions=[2]
-  STATE: order=order-missing-test current_version=0 current_status=None pending_versions=[2] highest_fencing_token=0 last_writer=None
-  RESULT: order did NOT jump to v2; it is still waiting for missing v1
-```
-
-This shows:
+**[Delivery 1]** in the screenshot shows:
 
 - **current version remains unchanged:** `current_version=0`, `current_status=None` (not PAID)
 - **later version is pending:** `pending_versions=[2]`
 - **missing earlier version identified:** `expected_version=1`, `missing_versions=[1]`
 
 The program does not invent the missing event. Only afterwards, as an optional
-recovery step, does v1 actually get delivered:
-
-```text
-[Recovery] v1 CREATED finally arrives
-  order=order-missing-test version=1 status=CREATED action=applied pending_versions=[2]
-  order=order-missing-test version=2 status=PAID action=applied_from_pending pending_versions=[]
-  STATE: order=order-missing-test current_version=2 current_status=PAID pending_versions=[] highest_fencing_token=0 last_writer=None
-```
+recovery step (**[Recovery]** in the screenshot), does v1 actually get delivered:
+v1 is applied, then the pending v2 is applied automatically, ending at
+`current_version=2 current_status=PAID`.
 
 ## 7. Stale Worker Evidence
 
@@ -185,27 +153,9 @@ A token equal to the highest is allowed so the current lease holder can make mor
 than one write; a smaller (older) token can never write again. Only after the token
 check passes does the normal version-ordering logic run.
 
-Actual output (Stale Worker section):
+Screenshot (Stale Worker section):
 
-```text
-=== Stale Worker / Fencing Token Demo ===
-  STATE: order=order-fencing-test current_version=0 current_status=None pending_versions=[] highest_fencing_token=0 last_writer=None
-
-[Step 1] worker-1 obtains a lease
-  worker=worker-1 token=1 action=lease_granted
-  (worker-1 then pauses, e.g. a long GC pause; its lease expires)
-
-[Step 2] worker-2 obtains a newer lease and updates the order
-  worker=worker-2 token=2 action=lease_granted
-  worker=worker-2 token=2 order=order-fencing-test action=accepted highest_fencing_token=2
-  order=order-fencing-test version=1 status=CREATED action=applied pending_versions=[]
-  STATE: order=order-fencing-test current_version=1 current_status=CREATED pending_versions=[] highest_fencing_token=2 last_writer=worker-2
-
-[Step 3] stale worker-1 wakes up and tries to update with token 1
-  worker=worker-1 token=1 latest_token=2 order=order-fencing-test attempted_version=2 attempted_status=PAID action=rejected_stale_worker
-  STATE: order=order-fencing-test current_version=1 current_status=CREATED pending_versions=[] highest_fencing_token=2 last_writer=worker-2
-  RESULT: stale worker-1 did NOT overwrite worker-2's state
-```
+![Stale Worker / Fencing Token Demo: token 2 accepted, token 1 rejected](screenshot_3_stale_worker.png)
 
 - `worker-1 token=1`, `worker-2 token=2` — tokens increase.
 - `worker-2 token=2 → accepted` — `highest_fencing_token` becomes 2.
@@ -218,7 +168,7 @@ stays `version=1, CREATED, last_writer=worker-2`.
 
 ## 8. Terminal Output / Test Logs
 
-All output above is copied directly from running `python3 order_simulation.py`
+All screenshots and output above come directly from running `python3 order_simulation.py`
 (Python 3.9.6, macOS). The program is fully deterministic, so it prints the same
 output every time. No timestamps are printed.
 
